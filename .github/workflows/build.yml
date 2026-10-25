@@ -1,23 +1,50 @@
-
 name: Build MoZx APK
 
 on:
   workflow_dispatch:
 
 jobs:
-  inspect:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install unzip
-        run: sudo apt-get update && sudo apt-get install -y unzip
+      - name: Install Java and Android SDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-      - name: Inspect MoZx source ZIP
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Inspect and extract source
         run: |
-          echo "Checking uploaded ZIP..."
-          unzip -t MoZx-Android-Source.zip
-          echo "ZIP file list:"
-          unzip -Z1 MoZx-Android-Source.zip | head -100
+          unzip -o MoZx-Android-Source.zip -d source
+          echo "Extracted files:"
+          find source -maxdepth 4 -type f | head -100
+
+      - name: Find Android Gradle project
+        run: |
+          find source -name gradlew -o -name settings.gradle -o -name settings.gradle.kts
+
+      - name: Build APK
+        run: |
+          GRADLEW=$(find source -name gradlew -type f | head -1)
+          if [ -z "$GRADLEW" ]; then
+            echo "No Gradle wrapper found in uploaded ZIP."
+            exit 1
+          fi
+          chmod +x "$GRADLEW"
+          cd "$(dirname "$GRADLEW")"
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoZx-APK
+          path: source/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
           
