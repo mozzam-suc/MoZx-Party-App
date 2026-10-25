@@ -6,37 +6,51 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Java and Android SDK
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Inspect and extract source
+      - name: Install unzip
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
+      - name: Extract MoZx source
         run: |
           unzip -o MoZx-Android-Source.zip -d source
-          echo "Extracted files:"
+          echo "Checking extracted files..."
           find source -maxdepth 4 -type f | head -100
 
-      - name: Find Android Gradle project
+      - name: Find Android project
+        id: project
+        shell: bash
         run: |
-          find source -name gradlew -o -name settings.gradle -o -name settings.gradle.kts
-
-      - name: Build APK
-        run: |
-          GRADLEW=$(find source -name gradlew -type f | head -1)
+          GRADLEW=$(find source -type f -name gradlew | head -1)
           if [ -z "$GRADLEW" ]; then
-            echo "No Gradle wrapper found in uploaded ZIP."
+            echo "No gradlew found. Checking package.json files..."
+            find source -type f \( -name package.json -o -name capacitor.config.ts -o -name capacitor.config.json \)
             exit 1
           fi
+          echo "gradlew=$GRADLEW" >> "$GITHUB_OUTPUT"
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          GRADLEW="${{ steps.project.outputs.gradlew }}"
           chmod +x "$GRADLEW"
           cd "$(dirname "$GRADLEW")"
           ./gradlew assembleDebug
